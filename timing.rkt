@@ -18,14 +18,13 @@
   (printf "- - - - - - - ~a tests - - - - - - -\n" title)
   (for ([len (in-list lengths)]
         [l (in-list ls)])
-    (define v (list->vector l))
     (printf "SIZE: ~a\n" len)
     (printf "sort:\n")
     (time (iter (sort l <)))
     (printf "vector-sort:\n")
-    (time (iter (vector-sort v <)))
+    (time (iter (vector-sort (list->vector l) <)))
     (unless (equal? (sort l < )
-                    (vector->list (vector-sort v <)))
+                    (vector->list (vector-sort (list->vector l) <)))
       (error "not equal!")))
   (printf "- - - - - end of ~a tests - - - - -\n" title))
 

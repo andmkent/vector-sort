@@ -122,7 +122,7 @@
 (define insertion-sort-cutoff 27)
 ;; how deep should quicksort go before switching to 
 (define (calc-max-depth len)
-  (i*2 (inexact->exact (round (log len)))))
+  3 #;(i*2 (inexact->exact (round (log len)))))
 
 
 ;; - - - - - - - - - - - - - - - - - - -
@@ -134,7 +134,7 @@
 ;; optimizations for special/common cases (i.e. no extract-key function,
 ;; using a primitive compare function like '<', etc)
 (define-syntax (introsort-body stx)
-
+  
   ;; - - - - - - - - - - - - - - - - - - -
   ;; key caching operations
   ;; - - - - - - - - - - - - - - - - - - -
@@ -150,7 +150,7 @@
                   (vset! A i (cons key val))
                   (loop (i+ i 1))))))
         #'(void)))
-
+  
   (define (maybe-uncache-keys cache? A len)
     (if cache?
         (with-syntax ([A A] [len len])
@@ -187,11 +187,42 @@
                                    (vset! A val-idx val))))
                  
                  #:-- hd))))
+  ;; - - - - - - - - - - - - - - - - - - -
+  ;; heapsort!
+  ;; - - - - - - - - - - - - - - - - - - -
+  (define (heapsort-def A <?)
+    (with-syntax ([A A]
+                  [<? <?])
+      #'(λ (low high)
+          (define (sift-down! root end)
+            (define lc (lchild root))
+            (define rc (i+ lc 1))
+            (when (i≤ lc end)
+              (define child 
+                (cond [(and (i≤ rc end)
+                            (<? (vref A lc) (vref A rc)))
+                       rc]
+                      [else lc]))
+              (when (<? (vref A root) (vref A child))
+                (swap! A root child))
+              (sift-down! child end)))
+
+          ;; heapify
+          (let ([i (i/2 (i- high 1))])
+            (while (i≤ low i)
+                   (sift-down! i high)
+                   #:-- i))
+          
+          (let ([end high])
+            (while (i< low end)
+                   (swap! A low end)
+                   (sift-down! low (i- end 1))
+                   #:-- end)))))
   
   ;; - - - - - - - - - - - - - - - - - - -
   ;; quicksort helpers
   ;; - - - - - - - - - - - - - - - - - - -
-
+  
   ;; select-pivot!
   ;; median of three pivot selection. Sorts low, middle, and high,
   ;; places the pivot in (high - 1) and returns the pivot's value.
@@ -208,7 +239,7 @@
             ;; put pivot in high - 1
             (swap! A middle (i- high 1))
             (vref A (i- high 1))))))
-
+  
   ;; partition!
   ;; partition algorithm used by quicksort, returns location
   ;; of pivot in partitioned section
@@ -233,14 +264,14 @@
                    ;; return pivot location
                    i])))))))
   ;; - - - - - - - - - - - - - - - - - - -
-  ;; quicksort!
+  ;; introsort!
   ;; - - - - - - - - - - - - - - - - - - -
-  (define (quicksort-def quicksort!
+  (define (introsort-def introsort!
                          partition!
                          insertion-sort!
                          heapsort!
                          A)
-    (with-syntax ([quicksort! quicksort!]
+    (with-syntax ([introsort! introsort!]
                   [partition! partition!]
                   [insertion-sort! insertion-sort!]
                   [heapsort! heapsort!]
@@ -252,58 +283,8 @@
             [(i= fuel 0) (heapsort! low high)]
             [else
              (let ([pivot (partition! low high)])
-               (quicksort! low (i- pivot 1) (i- fuel 1))
-               (quicksort! (i+ pivot 1) high (i- fuel 1)))]))))
-  ;; - - - - - - - - - - - - - - - - - - -
-  ;; heapsort helpers
-  ;; - - - - - - - - - - - - - - - - - - -
-
-  ;; heapify!
-  (define (heapify-def sift-down! A)
-    (with-syntax ([A A]
-                  [sift-down! sift-down!])
-      #'(λ (low high)
-          (let loop ([start (parent high)])
-            (when (i≤ low start)
-              (sift-down! start high)
-              (loop (i- start 1)))))))
-
-  ;; sift-down!
-  (define (sift-down-def A <?)
-    (with-syntax ([A A]
-                  [<? <?])
-      #'(λ (start end)
-          (let loop ([root start])
-            (define lc (lchild root))
-            (when (i≤ lc end)
-              (define rc (i+ lc 1))
-              (define swap
-                (cond
-                  [(<? (vref A root) (vref A lc))
-                   (cond
-                     [(and (i< lc end)
-                           (<? (vref A lc) (vref A rc)))
-                      rc]
-                     [else lc])]
-                  [else root]))
-              (unless (i= swap root)
-                (swap! A root swap)
-                (loop swap)))))))
-  ;; - - - - - - - - - - - - - - - - - - -
-  ;; heapsort!
-  ;; - - - - - - - - - - - - - - - - - - -
-  (define (heapsort-def heapify! sift-down! A)
-    (with-syntax ([A A]
-                  [heapify! heapify!]
-                  [sift-down! sift-down!])
-      #'(λ (low high)
-          (heapify! low high)
-          (let loop ([end high])
-            (when (i< 0 end)
-              (swap! A end low)
-              (let ([end (i- end 1)])
-                (sift-down! low end)
-                (loop end)))))))
+               (introsort! low (i- pivot 1) (i- fuel 1))
+               (introsort! (i+ pivot 1) high (i- fuel 1)))]))))
   (syntax-case stx ()
     [(_ A less-than? #:key extract-key #:cache-keys? cache-keys?)
      (with-syntax* ([len (generate-temporary 'len)]
@@ -313,9 +294,7 @@
                     [insertion-sort! (generate-temporary 'insertion-sort!)]
                     [select-pivot! (generate-temporary 'select-pivot!)]
                     [partition! (generate-temporary 'partition!)]
-                    [quicksort! (generate-temporary 'quicksort!)]
-                    [sift-down! (generate-temporary 'sift-down!)]
-                    [heapify! (generate-temporary 'heapify!)]
+                    [introsort! (generate-temporary 'introsort!)]
                     [heapsort! (generate-temporary 'heapsort!)])
        #`(let ()
            ;; comparison function that includes any needed
@@ -334,29 +313,24 @@
                [else
                 #,(maybe-cache-keys
                    (syntax->datum #'cache-keys?) #'extract-key #'A #'len)
-                (let ([max-recursive-depth (calc-max-depth len)])
-                  (letrec ([insertion-sort! #,(insertion-sort-def #'A #'<?)]
-                           [select-pivot! #,(select-pivot-def #'A #'<?)]
-                           [partition! #,(partition-def #'select-pivot! #'A #'<?)]
-                           [sift-down! #,(sift-down-def #'A #'<?)]
-                           [heapify! #,(heapify-def #'sift-down! #'A)]
-                           [heapsort! #,(heapsort-def #'heapify!
-                                                      #'sift-down!
-                                                      #'A)]
-                           [quicksort! #,(quicksort-def #'quicksort!
-                                                        #'partition!
-                                                        #'insertion-sort!
-                                                        #'heapsort!
-                                                        #'A)])
-                    (cond
-                      ;; check if it's already sorted
-                      [(for/and ([i (in-naturals)]
-                                 [j (in-range 1 len)])
-                         (<? (vref A i) (vref A j)))
-                       (void)]
-                      ;; otherwise start the sorting!
-                      [else
-                       (quicksort! 0 (i- len 1) max-recursive-depth)])))
+                (letrec ([insertion-sort! #,(insertion-sort-def #'A #'<?)]
+                         [select-pivot! #,(select-pivot-def #'A #'<?)]
+                         [partition! #,(partition-def #'select-pivot! #'A #'<?)]
+                         [heapsort! #,(heapsort-def #'A #'<?)]
+                         [introsort! #,(introsort-def #'introsort!
+                                                      #'partition!
+                                                      #'insertion-sort!
+                                                      #'heapsort!
+                                                      #'A)])
+                  (cond
+                    ;; check if it's already sorted
+                    [(for/and ([i (in-naturals)]
+                               [j (in-range 1 len)])
+                       (<? (vref A i) (vref A j)))
+                     (void)]
+                    ;; otherwise start the sorting!
+                    [else
+                     (introsort! 0 (i- len 1) (calc-max-depth len))]))
                 #,(maybe-uncache-keys
                    (syntax->datum #'cache-keys?) #'A #'len)]))))]))
 
