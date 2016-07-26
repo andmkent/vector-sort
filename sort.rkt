@@ -88,12 +88,6 @@
     (vset! A i (vref A j))
     (vset! A j tmp)))
 
-;; generic heapsort helpers
-(define-syntax-rule (parent i) (i/2 (i- i 1)))
-(define-syntax-rule (lchild i) (i+ (i*2 i) 1))
-(define-syntax-rule (rchild i) (i+ (i*2 i) 2))
-
-
 ;; while macro for concise incrementing/decrementing of variables
 (define-syntax (while stx)
   (syntax-case stx ()
@@ -122,7 +116,7 @@
 (define insertion-sort-cutoff 27)
 ;; how deep should quicksort go before switching to 
 (define (calc-max-depth len)
-  3 #;(i*2 (inexact->exact (round (log len)))))
+  (i*2 (inexact->exact (round (log len)))))
 
 
 ;; - - - - - - - - - - - - - - - - - - -
@@ -194,21 +188,26 @@
     (with-syntax ([A A]
                   [<? <?])
       #'(λ (low high)
+          ;; parent/child accessors that take into account
+          ;; where we are in A
+          (define (parent i) (i+ (i/2 (i- (i- i low) 1)) low))
+          (define (lchild i) (i+ (i+ (i*2 (i- i low)) 1) low))
+          ;; rchild is lchild + 1
+          
+          ;; sift-down!
           (define (sift-down! root end)
             (define lc (lchild root))
             (define rc (i+ lc 1))
             (when (i≤ lc end)
               (define child 
-                (cond [(and (i≤ rc end)
-                            (<? (vref A lc) (vref A rc)))
-                       rc]
-                      [else lc]))
+                (if (and (i≤ rc end) (<? (vref A lc) (vref A rc)))
+                    rc lc))
               (when (<? (vref A root) (vref A child))
                 (swap! A root child))
               (sift-down! child end)))
-
-          ;; heapify
-          (let ([i (i/2 (i- high 1))])
+          
+          ;; heapify!
+          (let ([i (parent high)])
             (while (i≤ low i)
                    (sift-down! i high)
                    #:-- i))
